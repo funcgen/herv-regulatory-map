@@ -54,89 +54,24 @@ This project forms the second major component of **HERVarium**, alongside the in
   * Motif hits (FIMO)
   * Summary tables per LTR, per family, and per regulatory category
 
-## 🛠️ Dependencies
-
-### Conda environment
-
-```yaml
-name: herv-regmap
-channels:
-  - conda-forge
-  - bioconda
-  - defaults
-dependencies:
-  - python=3.10
-  - bedtools
-  - bioconda::pyfaidx
-  - bioconda::meme
-  - pandas
-  - numpy
-  - biopython
-  - tqdm
-```
-
-Additional tools:
-
-* **FIMO** (MEME Suite 5.x)
-* **RepeatMasker** `.out` file for GRCh38
-* **Genome FASTA (GRCh38 from GENCODE)**
-* **JASPAR 2024** PFMs (CORE vertebrates, MEME format)
 
 ## 📁 Repository Structure
 ```
 .
 ├── scripts/
-│   ├── 01_merge_repeatmasker_ltrs.py
-│   ├── 02_assign_ltr_roles.py
-│   ├── 03_segment_u3_r_u5.py
-│   ├── 04_detect_pbs_ppt.py
-│   ├── 05_prepare_fasta_for_fimo.py
+│   ├── 01_extract_ltr_coordinates_from_repeatmasker.py
+│   ├── 02_merge_close_ltrs_by_subfamily.py
+│   ├── 03_extract_ltr_sequences.py
+│   ├── 04_split_fasta_by_subfamily.py
+│   ├── 05_fimo_create_background.sh
 │   ├── 06_run_fimo.py
-│   ├── 07_parse_fimo_results.py
-│   ├── 08_summarize_regulatory_features.py
+│   ├── 07_merge_all_fimo.py
+│   ├── 08_parse_fimo_and_generate_bed.py
 │   ├── 09_generate_ltr_catalogue.py
-│   ├── run_ltr_annotation_pipeline.py
-│   ├── run_ltr_motif_pipeline.py
-│   ├── run_full_regulatory_pipeline.py
+│   ├── 09_build_trna_minilib.py
+│   ├── 10_annotate_u3r_u5.py
 ├── README.md
 ├── LICENSE
-```
-
-## 📋 Example Usage
-
-### Step 1: LTR Reconstruction & U3–R–U5 Segmentation
-
-```bash
-python run_ltr_annotation_pipeline.py \
-  --repeatmasker GRCh38.genome.fa.out \
-  --genome GRCh38.genome.fa \
-  --output results/LTR_annotation
-```
-
-This generates:
-
-* `HERV_LTR_U3_R_U5_segments.bed` (high-confidence)
-* `HERV_LTR_U3_R_U5_segments_all.bed` (all segments)
-* `HERV_LTR_U3_R_U5_flanks.bed` (PBS/PPT)
-
-### Step 2: Motif Scanning with FIMO
-
-```bash
-python run_ltr_motif_pipeline.py \
-  --fasta results/LTR_annotation/LTRs.fa \
-  --motifs JASPAR2024_CORE_vertebrates_non-redundant.meme \
-  --bgfile results/bg_LTR_all.txt \
-  --threshold 1e-4 \
-  --output results/fimo_hits
-```
-
-### Step 3 Summary & Integration
-
-```bash
-python run_full_regulatory_pipeline.py \
-  --segments results/LTR_annotation/HERV_LTR_U3_R_U5_segments.bed \
-  --fimo results/fimo_hits \
-  --output results/LTR_regulatory_summary
 ```
 
 ## 📦 Dataset

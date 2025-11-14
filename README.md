@@ -5,8 +5,6 @@
 ## Genome-wide U3–R–U5 segmentation, regulatory motif mapping, and structural annotation of HERV LTRs
 This repository contains the complete pipeline for reconstructing and annotating the regulatory architecture of human endogenous retrovirus (HERV) long terminal repeats (LTRs). It includes scripts for merging fragmented RepeatMasker elements, assigning LTRs to internal ERV regions, delineating U3–R–U5 segments in a strand-aware manner, scanning regulatory motifs (TFBMs), and identifying flanking PBS/PPT sequences.
 
----
-
 ## 🧬 Overview
 LTRs encode the *regulatory interface* of retroviruses. Although most human HERVs are ancient and degenerated, many retain recognizable promoters, transcription-factor binding motifs (TFBMs), polyadenylation signals, or tRNA/PPT features that once drove retroviral replication and now may shape host gene regulation.
 
@@ -21,8 +19,6 @@ herv-regulatory-map provides a unified, genome-wide framework for:
 * generating publication-ready BED/TSV files for downstream analyses
 
 This project forms the second major component of **HERVarium**, alongside the internal domain annotation (*herv-domain-map*).
-
----
 
 ## 🚀 Features
 
@@ -55,8 +51,6 @@ This project forms the second major component of **HERVarium**, alongside the in
   * Motif hits (FIMO)
   * Summary tables per LTR, per family, and per regulatory category
 
----
-
 ## 🛠️ Dependencies
 
 ### Conda environment
@@ -85,8 +79,6 @@ Additional tools:
 * **Genome FASTA (GRCh38 from GENCODE)**
 * **JASPAR 2024** PFMs (CORE vertebrates, MEME format)
 
----
-
 ## 📁 Repository Structure
 ```
 .
@@ -106,8 +98,6 @@ Additional tools:
 ├── README.md
 ├── LICENSE
 ```
-
----
 
 ## 📋 Example Usage
 
@@ -145,7 +135,6 @@ python run_full_regulatory_pipeline.py \
   --fimo results/fimo_hits \
   --output results/LTR_regulatory_summary
 ```
----
 
 ## 📦 Dataset
 
@@ -164,8 +153,6 @@ is publicly available on Zenodo:
 
 🔗 **[https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)**
 
----
-
 ## 🧠 Citation
 
 If you use this resource, please cite:
@@ -173,8 +160,6 @@ If you use this resource, please cite:
 > **Montserrat-Ayuso, T., & Esteve-Codina, A. (2025). Regulatory architecture and transcription-factor motif landscape of human endogenous retrovirus LTRs.**
 > *bioRxiv* (in preparation).
 > Dataset: [https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)
-
----
 
 ## 📎 **License**
 

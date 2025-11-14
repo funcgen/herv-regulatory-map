@@ -154,16 +154,17 @@ The full dataset—including:
 
 is publicly available on Zenodo:
 
-🔗 **[https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)**
+🔗 [https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)
+
+Please cite our article (see below) and the corresponding dataset DOI if you reuse the data in your own work.
 
 ## 🧠 Citation
 
 If you use this resource, please cite:
 
-> **Montserrat-Ayuso, T., & Esteve-Codina, A. (2025). Regulatory architecture and transcription-factor motif landscape of human endogenous retrovirus LTRs.**
+> Montserrat-Ayuso, T., & Esteve-Codina, A. (2025). *Regulatory Features and Functional Specialization of Human Endogenous Retroviral LTRs: A Genome-Wide Annotation and Analysis via HERVarium.*
 > *bioRxiv* (in preparation).
-> Dataset: [https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)
 
-## 📎 **License**
+## 📎 License
 
 MIT License. See LICENSE for details.

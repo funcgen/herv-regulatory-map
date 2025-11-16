@@ -23,6 +23,7 @@ Here, we provide a unified, genome-wide framework for:
 
 This project forms the second major component of **HERVarium**, alongside the internal domain annotation (*herv-domain-map*).
 
+
 ## 🚀 Features
 
 * RepeatMasker-based LTR reconstruction:
@@ -89,6 +90,132 @@ dependencies:
 ├── LICENSE
 ```
 
+## 📋 Example Usage
+
+### Step 1: Extract LTR coordinates from RepeatMasker
+
+This step parses the RepeatMasker .out file and outputs a BED file containing only LTR/ERV elements (excluding internal regions).
+
+```
+python 01_extract_ltr_coordinates_from_repeatmasker.py \
+  --repeatmasker GRCh38.primary_assembly.genome.fa.out \
+  --output results/LTR_raw.bed
+```
+
+### Step 2: Merge fragmented LTR annotations
+
+RepeatMasker often splits LTRs into multiple fragments. This step merges nearby fragments by subfamily and strand using a 100 bp window by default. You can modify the `ALLOWED_GAP` parameter inside the script.
+
+``` 
+python 02_merge_close_ltrs_by_subfamily.py \
+  results/LTR_raw.bed \
+  results/LTR_merged.bed
+```
+
+### Step 3: Extract LTR genomic sequences
+
+Using the merged BED file and the reference genome, this step produces a strand-corrected FASTA file of LTRs.
+
+```
+python 03_extract_ltr_sequences.py \
+  --bed results/LTR_merged.bed \
+  --genome GRCh38.primary_assembly.genome.fa \
+  --output results/LTR_merged.fa
+```
+
+### Step 4: Split LTR FASTA by subfamily
+
+Each subfamily is written to its own FASTA file, which will be used for FIMO scanning.
+
+```
+python 04_split_fasta_by_subfamily.py \
+  --input results/LTR_merged.fa \
+  --output_dir results/by_subfamily
+```
+
+### Step 5: Build a global 0th-order background model
+
+``` 
+bash 05_fimo_create_background.sh \
+  results/LTR_merged.fa \
+  results/bg_LTR_all.txt
+```
+
+### Step 6: Run FIMO motif scanning
+
+This step scans each subfamily FASTA using JASPAR 2024 motifs (converted to MEME format).
+
+``` 
+for fa in results/by_subfamily/*.fa; do
+    sub=$(basename "$fa" .fa)
+    python 06_run_fimo.py \
+      --motifs JASPAR2024_CORE_vertebrates.meme \
+      --fasta "$fa" \
+      --bgfile results/bg_LTR_all.txt \
+      --output results/fimo/$sub
+done
+``` 
+
+### Step 7: Merge all FIMO outputs
+
+Combine all per-subfamily fimo.tsv tables into one file.
+
+```
+python 07_merge_all_fimo.py \
+  --input-dir results/fimo \
+  --output results/merged_fimo.tsv
+```
+
+### Step 8: Parse FIMO hits and generate BED coordinates
+
+This step converts motif hits into genomic coordinates and outputs two files:
+
+* sorted TSV with all hits
+* BED file containing all motifs coordinates
+
+```
+python 08_parse_fimo_and_generate_bed.py \
+  --input results/merged_fimo.tsv \
+  --output_tsv results/merged_fimo_sorted.tsv \
+  --output_bed results/merged_fimo.bed
+```
+
+### Step 9: Build a PBS tRNA mini-library
+
+This step extracts 3′ tRNA tails from GtRNAdb and prepares DNA and reverse-complement libraries for PBS detection.
+
+```
+python 09_build_trna_minilib.py \
+  --input hg38-mature-tRNAs.fa \
+  --outdir motifs/tRNA_PBS \
+  --tail 20
+``` 
+
+### Step 10: Annotate U3–R–U5 segments and flanks (PBS/PPT)
+
+This is the core step that assigns each LTR as 5′/3′/solo, detects promoter elements, PAS, PBS, and PPT, and outputs segmentation BED/TSVs.
+
+```
+python 10_annotate_u3r_u5.py \
+  --ltr-bed results/LTR_merged.bed \
+  --ltr-fasta results/LTR_merged.fa \
+  --genome GRCh38.primary_assembly.genome.fa \
+  --internal-bed results/internal_regions.bed \
+  --subfamily-map repeats_classfamily_map.tsv \
+  --promoters promoter_motifs.tsv \
+  --pas pas_hexamers.txt \
+  --trna-rc motifs/tRNA_PBS/tRNA_3prime_DNA_revcomp_dedup.fa \
+  --outdir results/U3R_U5
+``` 
+
+### Step 11: Downstream analysis (optional)
+
+To reproduce the plots and analyses used in the manuscript, you can run the accompanying R scripts:
+
+``` 
+Rscript analysis_ltr_regulation.R
+``` 
+
 ## 📦 Dataset
 
 This repository contains the scripts used to generate the LTR regulatory dataset accompanying our study.
@@ -104,7 +231,7 @@ The full dataset—including:
 
 is publicly available on Zenodo:
 
-🔗 [https://doi.org/10.5281/zenodo.16318928](https://doi.org/10.5281/zenodo.16318928)
+🔗 [https://doi.org/10.5281/zenodo.17602210](https://doi.org/10.5281/zenodo.17602210)
 
 Please cite our article (see below) and the corresponding dataset DOI if you reuse the data in your own work.
 

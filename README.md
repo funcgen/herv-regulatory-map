@@ -11,7 +11,7 @@ This repository contains the complete pipeline for reconstructing and annotating
 ## 🧬 Overview
 LTRs encode the *regulatory interface* of retroviruses. Although most human HERVs are ancient and degenerated, many retain recognizable promoters, transcription-factor binding motifs (TFBMs), polyadenylation signals, or tRNA/PPT features that once drove retroviral replication and now may shape host gene regulation.
 
-herv-regulatory-map provides a unified, genome-wide framework for:
+Here, we provide a unified, genome-wide framework for:
 
 * reconstructing HERV LTR structures
 * segmenting each LTR into U3, R, and U5 regions
@@ -19,40 +19,55 @@ herv-regulatory-map provides a unified, genome-wide framework for:
 * detecting PBS and PPT flanking signals
 * scanning >750 vertebrate TF motifs using FIMO
 * quantifying TFBM burden and positional enrichment
-* generating publication-ready BED/TSV files for downstream analyses
+* generating BED/TSV files for downstream analyses
 
 This project forms the second major component of **HERVarium**, alongside the internal domain annotation (*herv-domain-map*).
 
 ## 🚀 Features
 
-* RepeatMasker-based LTR reconstruction
+* RepeatMasker-based LTR reconstruction:
 
-  * Merge fragmented LTRs
-  * Associate LTRs with nearby internal regions
-  * Classify as 5′, 3′, both (tandem), or solo
+  * Extract LTR coordinates directly from RepeatMasker .out files
+  * Merge adjacent or fragmented LTR pieces by subfamily and strand, using a distance threshold
+  * Recover LTR genomic sequences from the reference genome FASTA
+  * Split merged LTRs into per-subfamily FASTA files for downstream FIMO scanning
 
-* U3–R–U5 segmentation
+* Motif scanning (TFBM detection)
 
-  * Strand-aware reconstruction
-  * Boundary discovery and confidence scoring
-  * High- and low-confidence outputs
+  * Build a single, global 0th-order Markov background from all LTR sequences
+  * Run FIMO (MEME suite) for each subfamily using JASPAR 2024 PFMs converted to MEME format
+  * Merge all FIMO results across subfamilies into a standardized table
 
-* Regulatory signal annotation
+* U3–R–U5 structural segmentation
 
-  * TFBM scanning using JASPAR 2024 CORE (PFMs → MEME format)
-  * Motif burden quantification (per LTR, per family)
-  * Positional density analysis (KDE, histogram, peak detection)
-  * Promoter-associated motifs
-  * PAS hexamer detection
-  * PBS (tRNA binding) and PPT detection
+  * Assign each LTR as 5′, 3′ or solo based on proximity to internal proviral regions
+  * Detect promoter-associated motifs within U3 (e.g., TATA box, Inr, BRE, DPE)
+  * Identify PAS (polyadenylation signal) hexamers in U3/R/U5
+  * Detect canonical PBS (tRNA-binding site) downstream of 5′ LTRs and PPT (polypurine tract) upstream of 3′ LTRs
+  * Output U3–R–U5 segments with confidence scores and problem-flagging
 
-* BED/TSV output
+## 🛠️ Dependencies
 
-  * Segmented LTRs
-  * High-confidence vs all-confidence sets
-  * PBS/PPT flanks
-  * Motif hits (FIMO)
-  * Summary tables per LTR, per family, and per regulatory category
+Conda environment:
+```
+name: ervreg
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.8
+  - pip
+  - pyfaidx=0.8.1.4
+  - biopython=1.83
+  - pandas=2.0.3
+  - pysam=0.22.1
+  - tqdm
+  - meme
+  - samtools
+  - bedtools
+```
 
 
 ## 📁 Repository Structure

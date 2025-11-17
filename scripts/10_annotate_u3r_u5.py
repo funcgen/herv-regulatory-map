@@ -890,7 +890,7 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
 
     # --- PBS (immediately downstream of 5' LTR) ---
     pbs_call = None
-    if role in ("5prime", "ambiguous") and not SKIP_PBS and ds_plus:
+    if role in ("5prime", "ambiguous",  "both") and not SKIP_PBS and ds_plus:
         PBS_MAXWIN = 250  # scan the first ~250 bp
         ds_scan = ds_plus[:PBS_MAXWIN]
         pbs_call = find_pbs(ds_scan, max_mm=None, min_k=12, max_k=20, boundary_bias=True)
@@ -898,7 +898,7 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
 
     # --- PPT (immediately upstream of 3' LTR) ---
     ppt_call = None
-    if role in ("3prime", "ambiguous") and not SKIP_PPT and us_plus:
+    if role in ("3prime", "ambiguous", "both") and not SKIP_PPT and us_plus:
         ppt_call = find_ppt(us_plus)  # -> (s, e, seqppt, "PPT") or None
 
     # Prepare outputs

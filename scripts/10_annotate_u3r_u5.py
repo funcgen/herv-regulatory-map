@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-U3/R/U5 annotator (v0.3 - fast)
+U3/R/U5 annotator (v2 - fast)
 - Uses pysam.FastaFile (persistent) instead of shelling to samtools per LTR
 - Multiprocessing over LTRs
 - Precompiled regexes, deduped tRNA tails
@@ -17,6 +17,8 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 from itertools import groupby
 from tqdm import tqdm
+
+print("Running U3/R/U5 annotator v2.")
 
 # ---------- Globals for worker processes ----------
 FASTA_PATH = None
@@ -257,9 +259,12 @@ def build_ltr_internal_mapping(ltrs, internals, link_dist=200, strategy="nearest
         if not ltrs_here:
             continue
 
-        # Precompute arrays for quick neighbor checks
-        l_starts = [r["start"] for r in ltrs_here]
-        l_ends   = [r["end"]   for r in ltrs_here]
+        # Precompute arrays for quick neighbor checks (MUST be sorted by the bisected key)
+        ltrs_by_start = sorted(ltrs_here, key=lambda r: (r["start"], r["end"]))
+        l_starts = [r["start"] for r in ltrs_by_start]
+
+        ltrs_by_end = sorted(ltrs_here, key=lambda r: (r["end"], r["start"]))
+        l_ends = [r["end"] for r in ltrs_by_end]
 
         for iv in ivs:
             # distances in GENOMIC space, but interpreted in transcript orientation
@@ -268,38 +273,39 @@ def build_ltr_internal_mapping(ltrs, internals, link_dist=200, strategy="nearest
             cand5, cand3 = [], []
 
             if strand == "+":
-                # 5' candidates: LTRs ending before iv.start
-                # distance d5 = iv.start - ltr.end
+                # 5' candidates: LTRs ending before iv.start  (use END-sorted list!)
                 idx = bisect_left(l_ends, iv["start"])
-                lo = max(0, idx-50); hi = min(len(ltrs_here), idx+1)
+                lo = max(0, idx-50); hi = min(len(ltrs_by_end), idx+1)
                 for j in range(lo, hi):
-                    lt = ltrs_here[j]
+                    lt = ltrs_by_end[j]
                     d5 = iv["start"] - lt["end"]
                     if 0 <= d5 <= link_dist:
                         cand5.append((d5, lt))
-                # 3' candidates: LTRs starting after iv.end
+
+                # 3' candidates: LTRs starting after iv.end  (use START-sorted list!)
                 idx = bisect_right(l_starts, iv["end"])
-                lo = max(0, idx-1); hi = min(len(ltrs_here), idx+50)
+                lo = max(0, idx-1); hi = min(len(ltrs_by_start), idx+50)
                 for j in range(lo, hi):
-                    lt = ltrs_here[j]
+                    lt = ltrs_by_start[j]
                     d3 = lt["start"] - iv["end"]
                     if 0 <= d3 <= link_dist:
                         cand3.append((d3, lt))
+
             else:
-                # '-' strand: swap sides in transcript orientation
-                # 5' candidates are to the right: d5 = ltr.start - iv.end
+                # '-' strand: 5' candidates are to the right: d5 = ltr.start - iv.end  (START-sorted)
                 idx = bisect_right(l_starts, iv["end"])
-                lo = max(0, idx-1); hi = min(len(ltrs_here), idx+50)
+                lo = max(0, idx-1); hi = min(len(ltrs_by_start), idx+50)
                 for j in range(lo, hi):
-                    lt = ltrs_here[j]
+                    lt = ltrs_by_start[j]
                     d5 = lt["start"] - iv["end"]
                     if 0 <= d5 <= link_dist:
                         cand5.append((d5, lt))
-                # 3' candidates are to the left: d3 = iv.start - ltr.end
+
+                # '-' strand: 3' candidates are to the left: d3 = iv.start - ltr.end  (END-sorted)
                 idx = bisect_left(l_ends, iv["start"])
-                lo = max(0, idx-50); hi = min(len(ltrs_here), idx+1)
+                lo = max(0, idx-50); hi = min(len(ltrs_by_end), idx+1)
                 for j in range(lo, hi):
-                    lt = ltrs_here[j]
+                    lt = ltrs_by_end[j]
                     d3 = iv["start"] - lt["end"]
                     if 0 <= d3 <= link_dist:
                         cand3.append((d3, lt))
@@ -511,9 +517,11 @@ def scan_promoter_all(seq_plus: str):
 
 
         # ---- GC% bonus for TATA-less promoters ----
-        # expects args.gc_bonus, GC_BONUS_WINDOW, GC_BONUS_THRESHOLD, GC_BONUS_NO_TATA to be defined
         if (globals().get("args") is not None) and getattr(args, "gc_bonus", 0) > 0:
-            if (not bool(tata_span)) if GC_BONUS_NO_TATA else True:
+            apply_gc = True
+            if GC_BONUS_NO_TATA and bool(tata_span):
+                apply_gc = False
+            if apply_gc:
                 ctx = _slice_rel(seq_plus, tss, GC_BONUS_WINDOW[0], GC_BONUS_WINDOW[1])
                 gc = _gc_fraction(ctx)
                 if gc >= GC_BONUS_THRESHOLD:
@@ -738,25 +746,29 @@ def classify_ltr_role(ltr, iv_index):
         return "solo", None, "no_internal_for_class"
 
     idx = iv_index[key]
-    starts, ends, rows = idx["starts"], idx["ends"], idx["rows"]
+    starts = idx["starts"]
+    rows_by_start = idx["rows_by_start"]
+    ends = idx["ends"]
+    rows_by_end = idx["rows_by_end"]
+
 
     cand = []
     # Using genomic relations (coordinates), then map to role by strand
     # LTR to the LEFT of internal: ltr.end <= iv.start
     i = bisect_left(starts, ltr["end"])
-    for j in range(max(0, i-5), min(len(rows), i+5)):
-        d = rows[j]["start"] - ltr["end"]
+    for j in range(max(0, i-5), min(len(rows_by_start), i+5)):
+        d = ltr["start"] - rows_by_end[j]["end"]
         if 0 <= d <= LINK_DIST:
             role = "5prime" if strand == "+" else "3prime"
-            cand.append((d, role, rows[j]))
+            cand.append((d, role, rows_by_start[j]))
 
     # LTR to the RIGHT of internal: ltr.start >= iv.end
     k = bisect_right(ends, ltr["start"])
-    for j in range(max(0, k-5), min(len(rows), k+5)):
-        d = ltr["start"] - rows[j]["end"]
+    for j in range(max(0, k-5), min(len(rows_by_end), k+5)):
+        d = ltr["start"] - rows_by_end[j]["end"]
         if 0 <= d <= LINK_DIST:
             role = "3prime" if strand == "+" else "5prime"
-            cand.append((d, role, rows[j]))
+            cand.append((d, role, rows_by_end[j]))
 
     if not cand:
         return "solo", None, f"no_match_within_{LINK_DIST}bp"
@@ -771,18 +783,29 @@ def classify_ltr_role(ltr, iv_index):
 def build_internal_index(internals):
     """
     Build per (chrom,strand,class) arrays for fast nearest queries.
+    Needs BOTH start-sorted and end-sorted arrays because we bisect on both.
     """
-    buckets=defaultdict(list)
+    buckets = defaultdict(list)
     for iv in internals:
         c = class_for_name(iv["name"]) or "NA"
         buckets[(iv["chrom"], iv["strand"], c)].append(iv)
-    index={}
+
+    index = {}
     for key, rows in buckets.items():
-        rows_sorted = sorted(rows, key=lambda r: (r["start"], r["end"]))
-        starts = [r["start"] for r in rows_sorted]
-        ends   = [r["end"]   for r in rows_sorted]
-        index[key]={"rows":rows_sorted,"starts":starts,"ends":ends}
+        rows_by_start = sorted(rows, key=lambda r: (r["start"], r["end"]))
+        starts = [r["start"] for r in rows_by_start]
+
+        rows_by_end = sorted(rows, key=lambda r: (r["end"], r["start"]))
+        ends = [r["end"] for r in rows_by_end]
+
+        index[key] = {
+            "rows_by_start": rows_by_start,
+            "starts": starts,
+            "rows_by_end": rows_by_end,
+            "ends": ends,
+        }
     return index
+
 
 # ---------- Worker function ----------
 

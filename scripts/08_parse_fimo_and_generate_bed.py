@@ -19,6 +19,17 @@ import argparse
 import re
 from tqdm import tqdm
 
+tqdm.pandas() # enables progress bars for pandas apply/progress_apply
+
+
+def flip_strand(s):
+    """Flip a strand symbol: '+' <-> '-', keep '.' unchanged."""
+    if s == '+':
+        return '-'
+    if s == '-':
+        return '+'
+    return s
+
 def parse_coordinates_from_name(name):
     """
     Extract chrom, start, end, and strand from sequence names like:
@@ -50,17 +61,40 @@ def main(input_file, output_tsv, output_bed):
     df_sorted.to_csv(output_tsv, sep='\t', index=False)
 
     print("🧬 Generating genomic coordinates for BED...")
-    df_sorted['genomic_start'] = df_sorted['ltr_start'] + df_sorted['start'] - 1
-    df_sorted['genomic_end'] = df_sorted['ltr_start'] + df_sorted['stop']
+    # FIMO start/stop are 1-based inclusive relative to the FASTA sequence.
+    # Your FASTA is LTR-oriented (5'->3' for the LTR). For '-' LTRs, the FASTA is reverse-complemented,
+    # so we must map using ltr_end (assumed BED end-exclusive).
+    plus_mask = (df_sorted['ltr_strand'] == '+')
+    minus_mask = (df_sorted['ltr_strand'] == '-')
 
-    df_sorted["bed_name"] = (
-        df_sorted["sequence_name"] + "_" +
-        df_sorted["motif_id"] + "_" +
-        df_sorted["motif_alt_id"]
+    # + strand LTR: genomic coordinates increase with FASTA coordinates
+    df_sorted.loc[plus_mask, 'genomic_start'] = df_sorted.loc[plus_mask, 'ltr_start'] + (df_sorted.loc[plus_mask, 'start'] - 1)
+    df_sorted.loc[plus_mask, 'genomic_end']   = df_sorted.loc[plus_mask, 'ltr_start'] + df_sorted.loc[plus_mask, 'stop']
+
+    # - strand LTR: FASTA is reverse-complemented, so map using ltr_end
+    df_sorted.loc[minus_mask, 'genomic_start'] = df_sorted.loc[minus_mask, 'ltr_end'] - df_sorted.loc[minus_mask, 'stop']
+    df_sorted.loc[minus_mask, 'genomic_end']   = df_sorted.loc[minus_mask, 'ltr_end'] - (df_sorted.loc[minus_mask, 'start'] - 1)
+
+    print("🧪 Sanity-checking coordinates...")
+    bad = df_sorted.progress_apply(lambda r: r["genomic_end"] <= r["genomic_start"], axis=1)
+    n_bad = int(bad.sum())
+    if n_bad > 0:
+        raise ValueError(f"Found {n_bad} hits with genomic_end <= genomic_start. Check coordinate conventions.")
+
+    # BED strand should be genomic: flip FIMO strand when the LTR is on '-'
+    df_sorted['genomic_strand'] = df_sorted['strand']
+    df_sorted.loc[minus_mask, 'genomic_strand'] = df_sorted.loc[minus_mask, 'strand'].map(flip_strand)
+
+
+    print("🏷️ Building BED names...")
+    df_sorted["bed_name"] = df_sorted.progress_apply(
+        lambda r: f"{r['sequence_name']}_{r['motif_id']}_{r['motif_alt_id']}",
+        axis=1
     )
 
+
     print(f"💾 Saving BED file to {output_bed}")
-    bed_df = df_sorted[["chrom", "genomic_start", "genomic_end", "bed_name", "score", "strand"]]
+    bed_df = df_sorted[["chrom", "genomic_start", "genomic_end", "bed_name", "score", "genomic_strand"]]
     bed_df.sort_values(by=["chrom", "genomic_start"]).to_csv(output_bed, sep="\t", header=False, index=False)
 
     print("✅ Done!")

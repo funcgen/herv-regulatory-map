@@ -18,7 +18,7 @@ from functools import partial
 from itertools import groupby
 from tqdm import tqdm
 
-print("Running U3/R/U5 annotator v2.")
+print("Running U3/R/U5 annotator v3.")
 
 # ---------- Globals for worker processes ----------
 FASTA_PATH = None
@@ -38,7 +38,7 @@ DIAG_DPE = False  # emit SIG:DPE_DIAG if any 5-mer DPE-like in +20..+40
 # ---- Low-risk promoter tweaks ----
 YR_INR_REGEX = r"(?P<YR>[CT][AG])"          # permissive mammalian Inr core at -1/+1 (YR)
 YR_INR_WEIGHT = 0.4                         # lighter than your current YYANWYY Inr
-GC_BONUS_WINDOW = (-150, +50)               # relative to +1 when scoring a TSS candidate
+GC_BONUS_WINDOW = (-150, +51)              # relative to +1 when scoring a TSS candidate
 GC_BONUS_THRESHOLD = 0.60                   # >60% GC counts as "high-GC"
 GC_BONUS_NO_TATA = True                     # only apply when no TATA detected near that candidate
 SECONDARY_TSS_RADIUS = 25                   # bp around best TSS (for 'broad' mode)
@@ -505,9 +505,9 @@ def scan_promoter_all(seq_plus: str):
             aux += W_DCE_STEP * hits; evid.append(f"DCE({hits})")
 
         # CpG-type helpers
-        if sp1_pat and sp1_pat.search(seq_plus[max(0, tss - 150):tss + 10]):
+        if sp1_pat and sp1_pat.search(seq_plus[max(0, tss - 150):tss + 11]):
             aux += W_SP1; evid.append("SP1")
-        if xcpe1_pat and xcpe1_pat.search(seq_plus[max(0, tss - 8):tss + 2]):
+        if xcpe1_pat and xcpe1_pat.search(seq_plus[max(0, tss - 8):tss + 3]):
             aux += W_XCPE1; evid.append("XCPE1")
 
         # Small synergy bonus: SP1 without TATA
@@ -558,9 +558,9 @@ def scan_polyA(seq_plus: str):
     """
     Find a 3′-proximal PAS → cleavage site with optional downstream GU-rich region.
     Strategy:
-      - Restrict scan to the last ~220 nt of the LTR.
+      - Restrict scan to the last ~280 nt of the LTR.
       - Among candidates, prefer the MOST DOWNSTREAM site that has a clear CA 10–30 nt later.
-      - Bonus if [GT]{8,} appears within ~30 nt after the cleavage.
+      - Bonus if a GU-rich DSE ([GT]{6,}) appears ~10–35 nt downstream of the cleavage.
     Output:
       {'cleave_idx': int, 'pas_idx': int, 'score': float, 'evid': str} or None
     """
@@ -586,12 +586,23 @@ def scan_polyA(seq_plus: str):
             cand = {"cleave_idx": None, "pas_idx": i, "score": 0.8,
                     "evid": f"PAS@{i};no_clear_CA"}
         else:
-            ca_abs = i + 10 + ca_pos  # index of 'C' in 'CA'
-            # GU-rich 1–30 nt after cleavage (after A of CA)
-            gu = re.search(r"[GT]{8,}", seq_plus[ca_abs+1: min(L, ca_abs+1+30)])
-            score = 2.2 + (1.0 if gu else 0.0)
-            evid  = f"PAS@{i};CA@{ca_abs}" + (f";GU@{(ca_abs+1)+gu.start()}-{(ca_abs+1)+gu.end()}" if gu else "")
-            cand = {"cleave_idx": ca_abs+1, "pas_idx": i, "score": score, "evid": evid}
+            ca_abs = i + 10 + ca_pos           # index of 'C' in 'CA'
+            cleave = ca_abs + 1                # cleavage after A (same as sensitive pass)
+
+            # GU-rich downstream element (DSE): +10..+35 after cleavage (more standard)
+            dse_win0 = min(L, cleave + 10)
+            dse_win1 = min(L, cleave + 35)
+            dse = re.search(r"[GT]{6,}", seq_plus[dse_win0:dse_win1])
+
+            score = 2.2 + (1.0 if dse else 0.0)
+
+            evid = f"PAS@{i};CA@{ca_abs}"
+            if dse:
+                # Report genomic-like interval relative to full seq (half-open in python coords)
+                evid += f";GU@{dse_win0 + dse.start()}-{dse_win0 + dse.end()}"
+
+            cand = {"cleave_idx": cleave, "pas_idx": i, "score": score, "evid": evid}
+
 
         # Because we iterate from 3′ to 5′, take the first with cleavage
         if cand["cleave_idx"] is not None:
@@ -607,7 +618,7 @@ def scan_polyA(seq_plus: str):
 def scan_polyA_sensitive(seq_plus: str):
     """
     Sensitive 3' search with guardrails:
-      - broader window (320 nt)
+      - broader window (360 nt)
       - CA distance 8..35
       - require U5 >= U5_MIN_HARD (and <= U5_MAX_SOFT) for any candidate
       - A-rich allowed ONLY if a DSE ([GT]{6,}) is present
@@ -731,80 +742,6 @@ def find_ppt(upstream_seq: str):
     hits.sort(key=lambda m: abs(L - m.end()))
     m=hits[0]
     return m.start(), m.end(), upstream_seq[m.start():m.end()], "PPT"
-
-# ---------- Linking with ClassFamily & (distance = LINK_DIST bp) ----------
-
-def classify_ltr_role(ltr, iv_index):
-    """
-    iv_index: dict[(chrom,strand,class)] -> dict with 'starts','ends','rows' arrays
-    Returns (role, link_name_or_None, reason)
-    """
-    chrom, strand = ltr["chrom"], ltr["strand"]
-    ltr_cls = class_for_name(ltr["name"]) or "NA"
-    key = (chrom, strand, ltr_cls)
-    if key not in iv_index:
-        return "solo", None, "no_internal_for_class"
-
-    idx = iv_index[key]
-    starts = idx["starts"]
-    rows_by_start = idx["rows_by_start"]
-    ends = idx["ends"]
-    rows_by_end = idx["rows_by_end"]
-
-
-    cand = []
-    # Using genomic relations (coordinates), then map to role by strand
-    # LTR to the LEFT of internal: ltr.end <= iv.start
-    i = bisect_left(starts, ltr["end"])
-    for j in range(max(0, i-5), min(len(rows_by_start), i+5)):
-        d = ltr["start"] - rows_by_end[j]["end"]
-        if 0 <= d <= LINK_DIST:
-            role = "5prime" if strand == "+" else "3prime"
-            cand.append((d, role, rows_by_start[j]))
-
-    # LTR to the RIGHT of internal: ltr.start >= iv.end
-    k = bisect_right(ends, ltr["start"])
-    for j in range(max(0, k-5), min(len(rows_by_end), k+5)):
-        d = ltr["start"] - rows_by_end[j]["end"]
-        if 0 <= d <= LINK_DIST:
-            role = "3prime" if strand == "+" else "5prime"
-            cand.append((d, role, rows_by_end[j]))
-
-    if not cand:
-        return "solo", None, f"no_match_within_{LINK_DIST}bp"
-
-    cand.sort(key=lambda x: x[0])
-    best_d, role, iv = cand[0]
-    if len(cand) > 1 and (cand[1][0] - best_d) <= 50:
-        return "ambiguous", f"{iv['name']}|{cand[1][2]['name']}", f"class={ltr_cls};tie@{best_d}"
-
-    return role, iv["name"], f"class={ltr_cls};strand={strand};d={best_d}"
-
-def build_internal_index(internals):
-    """
-    Build per (chrom,strand,class) arrays for fast nearest queries.
-    Needs BOTH start-sorted and end-sorted arrays because we bisect on both.
-    """
-    buckets = defaultdict(list)
-    for iv in internals:
-        c = class_for_name(iv["name"]) or "NA"
-        buckets[(iv["chrom"], iv["strand"], c)].append(iv)
-
-    index = {}
-    for key, rows in buckets.items():
-        rows_by_start = sorted(rows, key=lambda r: (r["start"], r["end"]))
-        starts = [r["start"] for r in rows_by_start]
-
-        rows_by_end = sorted(rows, key=lambda r: (r["end"], r["start"]))
-        ends = [r["end"] for r in rows_by_end]
-
-        index[key] = {
-            "rows_by_start": rows_by_start,
-            "starts": starts,
-            "rows_by_end": rows_by_end,
-            "ends": ends,
-        }
-    return index
 
 
 # ---------- Worker function ----------
@@ -1188,7 +1125,7 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
 
             # SP1 / GC-box: one best in [-150..+10] (prefer around −30)
             if sp1_pat:
-                u0 = max(0, best_tss - 150); u1 = min(L, best_tss + 10)
+                u0 = max(0, best_tss - 150); u1 = min(L, best_tss + 11)
                 best = None
                 for m in sp1_pat.finditer(seq_plus[u0:u1]):
                     a = u0 + m.start(); b = u0 + m.end()
@@ -1203,7 +1140,7 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
 
             # MTE: any occurrence in +18..+27; report the closest-to-+22 center
             if mte_pat:
-                m0 = min(L, best_tss + 18); m1 = min(L, best_tss + 27)
+                m0 = min(L, best_tss + 18); m1 = min(L, best_tss + 28)
                 best = None
                 for m in mte_pat.finditer(seq_plus[m0:m1]):
                     a = m0 + m.start(); b = m0 + m.end()
@@ -1214,11 +1151,11 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
                     g0, g1 = to_genomic(a, b)
                     signal_segs.append((chrom, g0, g1, f"{name}|SIG:MTE", 1, strand))
 
-            # DCE subelements: SI (+6..+11), SII (+16..+21), SIII (+28..+34) — one per subelement
+            # DCE subelements: SI (+6..+11), SII (+16..+21), SIII (+30..+34) — one per subelement
             for lab, pat, rel0, rel1 in (
                 ("DCE_SI",  PROMOTER_REGEX.get("DCE_SI"),   6, 11),
                 ("DCE_SII", PROMOTER_REGEX.get("DCE_SII"), 16, 21),
-                ("DCE_SIII",PROMOTER_REGEX.get("DCE_SIII"),28, 34),
+                ("DCE_SIII",PROMOTER_REGEX.get("DCE_SIII"),30, 34),
             ):
                 if pat:
                     w0 = max(0, best_tss + rel0); w1 = min(L, best_tss + rel1 + 1)
@@ -1230,7 +1167,7 @@ def process_one(r, ltr_seq_dict, genome_fasta_path):
 
             # XCPE1 (−8..+2) — report one if present
             if xcpe1_pat:
-                x0 = max(0, best_tss - 8); x1 = min(L, best_tss + 2)
+                x0 = max(0, best_tss - 8); x1 = min(L, best_tss + 3)
                 for m in xcpe1_pat.finditer(seq_plus[x0:x1]):
                     a = x0 + m.start(); b = x0 + m.end()
                     g0, g1 = to_genomic(a, b)
@@ -1329,7 +1266,6 @@ def main():
     # Build internal index
     global NAME2CLS
     NAME2CLS = name2cls
-    iv_index = build_internal_index(internals)
 
     prepped = [r.copy() for r in ltrs]
 

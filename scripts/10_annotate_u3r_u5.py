@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-U3/R/U5 annotator (v2 - fast)
+U3/R/U5 annotator
 - Uses pysam.FastaFile (persistent) instead of shelling to samtools per LTR
 - Multiprocessing over LTRs
 - Precompiled regexes, deduped tRNA tails
@@ -18,7 +18,7 @@ from functools import partial
 from itertools import groupby
 from tqdm import tqdm
 
-print("Running U3/R/U5 annotator v3.")
+print("Running U3/R/U5 annotator.")
 
 # ---------- Globals for worker processes ----------
 FASTA_PATH = None

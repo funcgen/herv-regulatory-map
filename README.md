@@ -237,8 +237,9 @@ Please cite our article (see below) and the corresponding dataset DOI if you reu
 
 If you use this resource, please cite:
 
-> Montserrat-Ayuso, T., & Esteve-Codina, A. (2025). *Regulatory Features and Functional Specialization of Human Endogenous Retroviral LTRs: A Genome-Wide Annotation and Analysis via HERVarium.*
-> *bioRxiv* (in preparation).
+> Regulatory Features and Functional Specialization of Human Endogenous Retroviral LTRs: A Genome-Wide Annotation and Analysis via HERVarium
+Tomàs Montserrat-Ayuso, Aurora Pujol, Anna Esteve-Codina
+bioRxiv 2026.02.17.706328; doi: https://doi.org/10.64898/2026.02.17.706328
 
 ## 📎 License
 

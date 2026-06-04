@@ -3,7 +3,7 @@
 # Genome-wide U3–R–U5 segmentation and regulatory motif mapping of HERV LTRs
 This repository contains the complete pipeline for reconstructing and annotating the regulatory architecture of human endogenous retrovirus (HERV) long terminal repeats (LTRs). It includes scripts for merging fragmented RepeatMasker elements, assigning LTRs to internal ERV regions, delineating U3–R–U5 segments in a strand-aware manner, scanning regulatory motifs (TFBMs), and identifying flanking PBS/PPT sequences.  
 <p align="center">
- <img width="200" height="100" alt="image" src="https://github.com/user-attachments/assets/247104a8-3b0f-4023-926d-7032fb187212" />
+ <img width="200" height="50" alt="image" src="https://github.com/user-attachments/assets/247104a8-3b0f-4023-926d-7032fb187212" />
 </p>
 
 ## 🧬 Overview
@@ -238,6 +238,9 @@ Please cite our article (see below) and the corresponding dataset DOI if you reu
 If you use this resource, please cite:
 
 > Regulatory Features and Functional Specialization of Human Endogenous Retroviral LTRs: A Genome-Wide Annotation and Analysis via HERVarium. Tomàs Montserrat-Ayuso, Aurora Pujol, Anna Esteve-Codina. bioRxiv 2026.02.17.706328; doi: https://doi.org/10.64898/2026.02.17.706328
+
+## 💰 Funding 
+This publication and all its results are supported by the AGAUR-FI predoctoral grant program (2025 FI-1 00642) Joan Oró, from the Secretariat for Universities and Research of the Department of Research and Universities of the Government of Catalonia, and by the European Social Fund Plus.
 
 ## 📎 License
 
